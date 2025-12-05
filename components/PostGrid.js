@@ -71,6 +71,15 @@ const PostGrid = forwardRef((props, ref) => {
 
   // localStorage에서 게시물 불러오기
   const loadPostsFromStorage = () => {
+    // 서버 사이드에서는 localStorage 접근 불가
+    if (typeof window === 'undefined') {
+      console.log('[PostGrid] 서버 사이드 렌더링, 기본 게시물 사용');
+      return defaultPosts.map(post => ({
+        ...post,
+        images: post.images || [post.imageURL]
+      }))
+    }
+    
     try {
       const stored = localStorage.getItem(STORAGE_KEY)
       if (stored) {
@@ -94,6 +103,11 @@ const PostGrid = forwardRef((props, ref) => {
 
   // localStorage에 게시물 저장하기
   const savePostsToStorage = (posts) => {
+    // 서버 사이드에서는 localStorage 접근 불가
+    if (typeof window === 'undefined') {
+      return;
+    }
+    
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(posts))
       console.log('[PostGrid] localStorage에 게시물 저장 완료:', posts.length, '개');
@@ -112,22 +126,43 @@ const PostGrid = forwardRef((props, ref) => {
   const [hoveredPost, setHoveredPost] = useState(null)
   const [selectedPost, setSelectedPost] = useState(null)
   const [postImageIndices, setPostImageIndices] = useState({}) // 각 게시물의 현재 이미지 인덱스
+  const isDeletingRef = useRef(false) // 삭제 중 플래그 (ref 사용으로 클로저 문제 방지)
 
   // 게시물 삭제 함수
   const deletePost = useCallback((postId) => {
-    console.log('[PostGrid] 게시물 삭제:', postId);
+    console.log('[PostGrid] 게시물 삭제 요청:', postId, '현재 삭제 중:', isDeletingRef.current);
     
-    // 먼저 선택된 게시물이 삭제될 예정이면 모달 닫기
-    if (selectedPost && selectedPost.id === postId) {
-      setSelectedPost(null)
+    // 이미 삭제 중이면 무시
+    if (isDeletingRef.current) {
+      console.log('[PostGrid] 이미 삭제 진행 중, 중복 요청 무시');
+      return;
     }
     
-    if (!window.confirm('게시물을 삭제하시겠습니까?')) {
-      console.log('[PostGrid] 게시물 삭제 취소');
+    // 플래그 설정 (중복 호출 방지)
+    isDeletingRef.current = true;
+    
+    // 삭제 확인 다이얼로그 표시
+    // 확인 클릭 시 true, 취소 클릭 시 false 반환
+    const userConfirmed = window.confirm('게시물을 삭제하시겠습니까?');
+    
+    console.log('[PostGrid] 사용자 확인 결과:', userConfirmed ? '확인' : '취소');
+    
+    // 취소를 누른 경우
+    if (!userConfirmed) {
+      console.log('[PostGrid] 사용자가 취소를 선택함 - 삭제하지 않음');
+      isDeletingRef.current = false;
       return;
     }
 
+    // 확인을 누른 경우에만 삭제 진행
+    console.log('[PostGrid] 사용자가 확인을 선택함 - 삭제 진행');
+    
     try {
+      // 먼저 선택된 게시물이 삭제될 예정이면 모달 닫기
+      if (selectedPost && selectedPost.id === postId) {
+        setSelectedPost(null)
+      }
+      
       setAllPosts(prevPosts => {
         const filtered = prevPosts.filter(post => post.id !== postId)
         console.log('[PostGrid] 게시물 삭제 완료, 남은 게시물:', filtered.length);
@@ -143,8 +178,16 @@ const PostGrid = forwardRef((props, ref) => {
       if (onPostDelete) {
         onPostDelete(postId)
       }
+      
+      console.log('[PostGrid] 게시물 삭제 성공');
     } catch (error) {
       console.error('[PostGrid] 게시물 삭제 중 오류 발생:', error);
+    } finally {
+      // 삭제 완료 후 플래그 해제
+      setTimeout(() => {
+        isDeletingRef.current = false;
+        console.log('[PostGrid] 삭제 플래그 해제');
+      }, 300);
     }
   }, [selectedPost, onPostDelete])
 
@@ -281,9 +324,18 @@ const PostGrid = forwardRef((props, ref) => {
   }
 
   const handlePostClick = (post, e) => {
+    // 이벤트가 없으면 실행하지 않음
+    if (!e) return;
+    
     // 삭제 버튼이나 다른 버튼 클릭 시에는 모달을 열지 않음
-    if (e && (e.target.closest('button') || e.target.closest('.deleteButton'))) {
+    const target = e.target
+    if (target.closest('button') || 
+        target.closest('.deleteButton') || 
+        target.tagName === 'BUTTON' ||
+        target.closest('[class*="delete"]')) {
       console.log('[PostGrid] 버튼 클릭으로 인한 게시물 클릭 무시');
+      e.stopPropagation()
+      e.preventDefault()
       return;
     }
     
@@ -533,14 +585,35 @@ const PostGrid = forwardRef((props, ref) => {
               {showDeleteButton && filterByUser && post.username === filterByUser && (
                 <button
                   className={styles.deleteButton}
+                  type="button"
                   onClick={(e) => {
-                    e.stopPropagation()
-                    e.preventDefault()
-                    deletePost(post.id)
+                    console.log('[PostGrid] 삭제 버튼 클릭됨, postId:', post.id);
+                    if (e) {
+                      e.stopPropagation()
+                      e.preventDefault()
+                      // nativeEvent가 있으면 stopImmediatePropagation 사용
+                      if (e.nativeEvent && typeof e.nativeEvent.stopImmediatePropagation === 'function') {
+                        e.nativeEvent.stopImmediatePropagation()
+                      }
+                    }
+                    
+                    // 삭제 중이 아니면 삭제 실행
+                    if (!isDeletingRef.current) {
+                      deletePost(post.id)
+                    } else {
+                      console.log('[PostGrid] 삭제 진행 중이므로 무시');
+                    }
                   }}
                   onMouseDown={(e) => {
-                    e.stopPropagation()
+                    if (e) {
+                      e.stopPropagation()
+                      e.preventDefault()
+                      if (e.nativeEvent && typeof e.nativeEvent.stopImmediatePropagation === 'function') {
+                        e.nativeEvent.stopImmediatePropagation()
+                      }
+                    }
                   }}
+                  disabled={isDeletingRef.current}
                   title="게시물 삭제"
                 >
                   삭제

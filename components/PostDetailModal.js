@@ -125,14 +125,42 @@ export default function PostDetailModal({ post, isOpen, onClose, onLikeUpdate, o
     }
   }
 
-  const handlePostDelete = () => {
-    console.log('[PostDetailModal] 게시물 삭제 요청:', post.id);
-    
-    if (window.confirm('게시물을 삭제하시겠습니까?')) {
-      if (onPostDelete) {
-        onPostDelete(post.id)
-        onClose() // 모달 닫기
+  const handlePostDelete = (e) => {
+    if (e) {
+      e.stopPropagation()
+      e.preventDefault()
+      // nativeEvent가 있으면 stopImmediatePropagation 사용
+      if (e.nativeEvent && typeof e.nativeEvent.stopImmediatePropagation === 'function') {
+        e.nativeEvent.stopImmediatePropagation()
       }
+    }
+    
+    console.log('[PostDetailModal] 게시물 삭제 버튼 클릭됨, postId:', post.id);
+    
+    // 삭제 확인 다이얼로그 표시
+    // 확인 클릭 시 true, 취소 클릭 시 false 반환
+    const userConfirmed = window.confirm('게시물을 삭제하시겠습니까?');
+    
+    console.log('[PostDetailModal] 사용자 확인 결과:', userConfirmed ? '확인' : '취소');
+    
+    // 취소를 누른 경우
+    if (!userConfirmed) {
+      console.log('[PostDetailModal] 사용자가 취소를 선택함 - 삭제하지 않음');
+      return;
+    }
+    
+    // 확인을 누른 경우에만 삭제 진행
+    console.log('[PostDetailModal] 사용자가 확인을 선택함 - 삭제 진행');
+    
+    // 먼저 모달 닫기
+    onClose()
+    
+    // 그 다음 삭제 실행
+    if (onPostDelete) {
+      setTimeout(() => {
+        console.log('[PostDetailModal] 삭제 함수 호출');
+        onPostDelete(post.id)
+      }, 100) // 모달이 닫힌 후 삭제 실행
     }
   }
 
@@ -148,6 +176,10 @@ export default function PostDetailModal({ post, isOpen, onClose, onLikeUpdate, o
           <button 
             className={styles.deletePostButton} 
             onClick={handlePostDelete}
+            onMouseDown={(e) => {
+              e.stopPropagation()
+              e.preventDefault()
+            }}
             title="게시물 삭제"
           >
             🗑️ 삭제
