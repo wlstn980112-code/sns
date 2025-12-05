@@ -222,3 +222,34 @@
   font-size: 0.9rem;
 }
 
+.deleteButton {
+  margin-top: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: #ff4444;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+}
+
+.deleteButton:hover {
+  background: #cc0000;
+  transform: translateY(-1px);
+}
+
+.emptyState {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 4rem 2rem;
+}
+
+.emptyText {
+  font-size: 1.1rem;
+  color: #999;
+  margin: 0;
+}
+

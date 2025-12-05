@@ -1,13 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
 import styles from '../styles/PostDetailModal.module.css'
 
-export default function PostDetailModal({ post, isOpen, onClose, onLikeUpdate, onCommentAdd, onCommentDelete, onCommentLikeUpdate }) {
+export default function PostDetailModal({ post, isOpen, onClose, onLikeUpdate, onCommentAdd, onCommentDelete, onCommentLikeUpdate, onPostDelete, currentUser = '나' }) {
   const [commentText, setCommentText] = useState('')
   const [isLiked, setIsLiked] = useState(false)
   const [currentLikesCount, setCurrentLikesCount] = useState(0)
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const commentInputRef = useRef(null)
-  const currentUser = '나' // 실제로는 로그인한 사용자 정보에서 가져옴
 
   console.log('[PostDetailModal] 모달 상태:', isOpen, '게시물 ID:', post?.id);
 
@@ -126,12 +125,34 @@ export default function PostDetailModal({ post, isOpen, onClose, onLikeUpdate, o
     }
   }
 
+  const handlePostDelete = () => {
+    console.log('[PostDetailModal] 게시물 삭제 요청:', post.id);
+    
+    if (window.confirm('게시물을 삭제하시겠습니까?')) {
+      if (onPostDelete) {
+        onPostDelete(post.id)
+        onClose() // 모달 닫기
+      }
+    }
+  }
+
   return (
     <div className={styles.modalOverlay} onClick={handleOverlayClick}>
       <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
         <button className={styles.closeButton} onClick={onClose}>
           ✕
         </button>
+
+        {/* 게시물 삭제 버튼 (자신의 게시물일 때만) */}
+        {onPostDelete && post.username === currentUser && (
+          <button 
+            className={styles.deletePostButton} 
+            onClick={handlePostDelete}
+            title="게시물 삭제"
+          >
+            🗑️ 삭제
+          </button>
+        )}
 
         <div className={styles.postContainer}>
           {/* 이미지 섹션 */}

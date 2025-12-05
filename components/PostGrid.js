@@ -4,9 +4,14 @@ import styles from '../styles/PostGrid.module.css'
 
 const PostGrid = forwardRef((props, ref) => {
   console.log('[PostGrid] 컴포넌트 렌더링 시작');
+  
+  const { filterByUser, onPostDelete, showDeleteButton = false } = props
+
+  // localStorage 키
+  const STORAGE_KEY = 'sns-posts'
 
   // 더미 게시물 데이터 (댓글 포함, 좋아요 상태 포함)
-  const initialPosts = [
+  const defaultPosts = [
     {
       id: 1,
       imageURL: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=400&fit=crop',
@@ -64,10 +69,40 @@ const PostGrid = forwardRef((props, ref) => {
     }
   ]
 
-  const [allPosts, setAllPosts] = useState(initialPosts.map(post => ({
-    ...post,
-    images: post.images || [post.imageURL] // 기존 게시물도 images 배열로 변환
-  })))
+  // localStorage에서 게시물 불러오기
+  const loadPostsFromStorage = () => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY)
+      if (stored) {
+        const parsedPosts = JSON.parse(stored)
+        console.log('[PostGrid] localStorage에서 게시물 불러오기 성공:', parsedPosts.length, '개');
+        return parsedPosts.map(post => ({
+          ...post,
+          images: post.images || (post.imageURL ? [post.imageURL] : [])
+        }))
+      }
+    } catch (error) {
+      console.error('[PostGrid] localStorage에서 게시물 불러오기 실패:', error);
+    }
+    // localStorage에 데이터가 없으면 기본 게시물 반환
+    console.log('[PostGrid] localStorage에 데이터 없음, 기본 게시물 사용');
+    return defaultPosts.map(post => ({
+      ...post,
+      images: post.images || [post.imageURL]
+    }))
+  }
+
+  // localStorage에 게시물 저장하기
+  const savePostsToStorage = (posts) => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(posts))
+      console.log('[PostGrid] localStorage에 게시물 저장 완료:', posts.length, '개');
+    } catch (error) {
+      console.error('[PostGrid] localStorage에 게시물 저장 실패:', error);
+    }
+  }
+
+  const [allPosts, setAllPosts] = useState(() => loadPostsFromStorage())
   
   const [displayedCount, setDisplayedCount] = useState(6) // 초기 표시 개수
   const [isLoading, setIsLoading] = useState(false)
@@ -78,8 +113,47 @@ const PostGrid = forwardRef((props, ref) => {
   const [selectedPost, setSelectedPost] = useState(null)
   const [postImageIndices, setPostImageIndices] = useState({}) // 각 게시물의 현재 이미지 인덱스
 
-  // 표시할 게시물 계산
-  const posts = allPosts.slice(0, displayedCount)
+  // 게시물 삭제 함수
+  const deletePost = useCallback((postId) => {
+    console.log('[PostGrid] 게시물 삭제:', postId);
+    
+    // 먼저 선택된 게시물이 삭제될 예정이면 모달 닫기
+    if (selectedPost && selectedPost.id === postId) {
+      setSelectedPost(null)
+    }
+    
+    if (!window.confirm('게시물을 삭제하시겠습니까?')) {
+      console.log('[PostGrid] 게시물 삭제 취소');
+      return;
+    }
+
+    try {
+      setAllPosts(prevPosts => {
+        const filtered = prevPosts.filter(post => post.id !== postId)
+        console.log('[PostGrid] 게시물 삭제 완료, 남은 게시물:', filtered.length);
+        // localStorage에 저장
+        savePostsToStorage(filtered)
+        return filtered
+      })
+      
+      // 표시 개수 조정
+      setDisplayedCount(prev => Math.max(6, prev - 1))
+      
+      // 부모 컴포넌트에 삭제 알림
+      if (onPostDelete) {
+        onPostDelete(postId)
+      }
+    } catch (error) {
+      console.error('[PostGrid] 게시물 삭제 중 오류 발생:', error);
+    }
+  }, [selectedPost, onPostDelete])
+
+  // 표시할 게시물 계산 (필터링 적용)
+  const filteredPosts = filterByUser 
+    ? allPosts.filter(post => post.username === filterByUser)
+    : allPosts
+  
+  const posts = filteredPosts.slice(0, displayedCount)
 
   // 새 게시물 추가 함수 (useCallback으로 메모이제이션)
   const addPost = useCallback((newPost) => {
@@ -102,7 +176,12 @@ const PostGrid = forwardRef((props, ref) => {
       console.log('[PostGrid] 게시물 데이터:', postWithComments);
       
       // allPosts에 추가하고 맨 앞에 배치
-      setAllPosts(prev => [postWithComments, ...prev])
+      setAllPosts(prev => {
+        const updated = [postWithComments, ...prev]
+        // localStorage에 저장
+        savePostsToStorage(updated)
+        return updated
+      })
       
       // 표시 개수도 증가 (새 게시물이 보이도록)
       setDisplayedCount(prev => prev + 1)
@@ -151,6 +230,9 @@ const PostGrid = forwardRef((props, ref) => {
         }
       }
       
+      // localStorage에 저장
+      savePostsToStorage(updatedPosts)
+      
       return updatedPosts
     })
   }, [selectedPost])
@@ -174,6 +256,9 @@ const PostGrid = forwardRef((props, ref) => {
         }
       }
       
+      // localStorage에 저장
+      savePostsToStorage(updatedPosts)
+      
       return updatedPosts
     })
   }, [selectedPost])
@@ -182,8 +267,9 @@ const PostGrid = forwardRef((props, ref) => {
   useImperativeHandle(ref, () => ({
     addPost,
     updateLike,
-    addComment
-  }), [addPost, updateLike, addComment])
+    addComment,
+    deletePost
+  }), [addPost, updateLike, addComment, deletePost])
 
   const handleMouseEnter = (postId) => {
     console.log(`[PostGrid] 게시물 ${postId}에 마우스 호버`);
@@ -194,7 +280,13 @@ const PostGrid = forwardRef((props, ref) => {
     setHoveredPost(null)
   }
 
-  const handlePostClick = (post) => {
+  const handlePostClick = (post, e) => {
+    // 삭제 버튼이나 다른 버튼 클릭 시에는 모달을 열지 않음
+    if (e && (e.target.closest('button') || e.target.closest('.deleteButton'))) {
+      console.log('[PostGrid] 버튼 클릭으로 인한 게시물 클릭 무시');
+      return;
+    }
+    
     console.log('[PostGrid] 게시물 클릭:', post.id);
     // images 배열이 없으면 imageURL로 배열 생성
     const postWithImages = {
@@ -237,6 +329,9 @@ const PostGrid = forwardRef((props, ref) => {
           setSelectedPost(updatedPost)
         }
       }
+      
+      // localStorage에 저장
+      savePostsToStorage(updatedPosts)
       
       return updatedPosts
     })
@@ -286,6 +381,9 @@ const PostGrid = forwardRef((props, ref) => {
         }
       }
       
+      // localStorage에 저장
+      savePostsToStorage(updatedPosts)
+      
       return updatedPosts
     })
   }
@@ -299,7 +397,10 @@ const PostGrid = forwardRef((props, ref) => {
     
     // 시뮬레이션: 실제로는 API 호출
     setTimeout(() => {
-      const currentTotal = allPosts.length
+      const filteredPosts = filterByUser 
+        ? allPosts.filter(post => post.username === filterByUser)
+        : allPosts
+      const currentTotal = filteredPosts.length
       const newDisplayedCount = Math.min(displayedCount + 6, currentTotal)
       
       setDisplayedCount(newDisplayedCount)
@@ -308,7 +409,7 @@ const PostGrid = forwardRef((props, ref) => {
       
       console.log('[PostGrid] 게시물 로드 완료:', newDisplayedCount, '/', currentTotal);
     }, 500) // 로딩 시뮬레이션
-  }, [displayedCount, isLoading, hasMore, allPosts.length])
+  }, [displayedCount, isLoading, hasMore, allPosts, filterByUser])
 
   // Intersection Observer로 하단 감지
   useEffect(() => {
@@ -337,20 +438,30 @@ const PostGrid = forwardRef((props, ref) => {
 
   // 게시물이 추가되면 hasMore 업데이트
   useEffect(() => {
-    const currentTotal = allPosts.length
+    const filteredPosts = filterByUser 
+      ? allPosts.filter(post => post.username === filterByUser)
+      : allPosts
+    const currentTotal = filteredPosts.length
     setHasMore(displayedCount < currentTotal)
-  }, [displayedCount, allPosts.length])
+  }, [displayedCount, allPosts, filterByUser])
 
   return (
     <>
       <div className={styles.postGrid}>
-        {posts.map((post) => (
+        {posts.length === 0 ? (
+          <div className={styles.emptyState}>
+            <p className={styles.emptyText}>
+              {filterByUser ? '아직 올린 게시물이 없습니다.' : '게시물이 없습니다.'}
+            </p>
+          </div>
+        ) : (
+          posts.map((post) => (
           <div
             key={post.id}
             className={styles.postCard}
             onMouseEnter={() => handleMouseEnter(post.id)}
             onMouseLeave={handleMouseLeave}
-            onClick={() => handlePostClick(post)}
+            onClick={(e) => handlePostClick(post, e)}
           >
             <div className={styles.imageContainer}>
               {(() => {
@@ -419,9 +530,26 @@ const PostGrid = forwardRef((props, ref) => {
             </div>
             <div className={styles.postInfo}>
               <p className={styles.caption}>{post.caption}</p>
+              {showDeleteButton && filterByUser && post.username === filterByUser && (
+                <button
+                  className={styles.deleteButton}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    e.preventDefault()
+                    deletePost(post.id)
+                  }}
+                  onMouseDown={(e) => {
+                    e.stopPropagation()
+                  }}
+                  title="게시물 삭제"
+                >
+                  삭제
+                </button>
+              )}
             </div>
           </div>
-        ))}
+        ))
+        )}
         
         {/* 무한 스크롤 트리거 */}
         {hasMore && (
@@ -451,6 +579,8 @@ const PostGrid = forwardRef((props, ref) => {
           onCommentAdd={handleCommentAdd}
           onCommentDelete={handleCommentDelete}
           onCommentLikeUpdate={handleCommentLikeUpdate}
+          onPostDelete={showDeleteButton && filterByUser && selectedPost.username === filterByUser ? deletePost : null}
+          currentUser={filterByUser || '나'}
         />
       )}
     </>

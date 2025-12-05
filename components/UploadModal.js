@@ -214,9 +214,9 @@ export default function UploadModal({ isOpen, onClose, onUpload }) {
       return
     }
 
-    // 사진 이름 확인
+    // 게시물 제목 확인
     if (!username.trim()) {
-      alert('사진 이름을 입력해주세요.')
+      alert('게시물 제목을 입력해주세요.')
       return
     }
 
@@ -227,12 +227,14 @@ export default function UploadModal({ isOpen, onClose, onUpload }) {
       id: Date.now(), // 고유 ID
       images: imageList, // 여러 이미지 배열
       imageURL: imageList[0], // 첫 번째 이미지 (호환성을 위해 유지)
-      username: username.trim(),
+      username: '나', // 항상 현재 사용자로 고정
       likesCount: 0,
-      caption: caption.trim() || '맛있는 요리를 공유합니다! 🍽️',
+      caption: caption.trim() || username.trim() || '맛있는 요리를 공유합니다! 🍽️', // 설명이 있으면 사용, 없으면 제목 사용, 둘 다 없으면 기본값
       comments: [],
       isLiked: false
     }
+    
+    console.log('[UploadModal] 게시물 데이터:', newPost);
 
     // 부모 컴포넌트에 전달
     onUpload(newPost)
@@ -358,14 +360,14 @@ export default function UploadModal({ isOpen, onClose, onUpload }) {
               <div className={styles.commonForm}>
                 <div className={styles.formGroup}>
                   <label htmlFor="username" className={styles.label}>
-                    사진 이름 *
+                    게시물 제목 *
                   </label>
                   <input
                     id="username"
                     type="text"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    placeholder="사진 이름을 입력하세요"
+                    placeholder="게시물 제목을 입력하세요"
                     className={styles.input}
                     maxLength={20}
                   />
